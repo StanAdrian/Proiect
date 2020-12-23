@@ -103,3 +103,48 @@ app.post('/add-self-as-tester', async (req, res) => {
         .catch((err) => res.status(500).send(err))
     return res.status(403).send({ error: 'User is not MP of project' })
   })
+  
+const isMp = (projectId, userId) =>
+ProjectsRepository.getUserRole(projectId, userId).then((role) => role === 'MP')
+
+app.post('/assign-bug', async (req, res) => {
+const { bugId } = req.body
+const { id: userId } = req.user
+const bug = await Bug.findByPk(bugId)
+if (bug) {
+  const { projectId, assignedUserId } = bug.dataValues
+  if (!assignedUserId && (await isMp(projectId, userId))) {
+    bug.assignedUserId = userId
+    bug.status = 'ASSIGNED'
+    return bug
+      .save()
+      .then((bug) => res.status(203).send(bug))
+      .catch((err) => res.status(500).send(err))
+  }
+  return res.status(401).send({ error: 'Project does not exist or user is not MP' })
+}
+return res.status(401).send({ error: 'Bug id does not exist' })
+})
+
+app.post('/update-bug-status', async (req, res) => {
+const { solveCommitUrl, bugId } = req.body
+const { id: userId } = req.user
+const bug = await Bug.findByPk(bugId)
+if (bug) {
+  const { projectId, status, assignedUserId } = bug.dataValues
+  if (status === 'ASSIGNED' && assignedUserId === userId && (await isMp(projectId, userId))) {
+    bug.solveCommitUrl = solveCommitUrl
+    bug.status = 'SOLVED'
+    return bug
+      .save()
+      .then((bug) => res.status(203).send(bug))
+      .catch((err) => res.status(500).send(err))
+  }
+  return res.status(401).send({ error: 'Project does not exist or user is not MP' })
+}
+return res.status(401).send({ error: 'Bug id does not exist' })
+})
+
+app.listen(port, () => {
+console.log(`Bugtracker api listening at http://localhost:${port}`)
+})

@@ -32,3 +32,30 @@ app.post('/register', (req, res) => {
     .then((user) => res.status(201).send({ token: JwtService.sign(_getPayload(user)) }))
     .catch((err) => res.status(500).send({ error: err.message }))
 })
+
+app.get('/projects', (req, res) => {
+    return ProjectsRepository.findAll()
+      .then((projects) => res.status(200).send(projects))
+      .catch((err) => res.status(500).send(err))
+  })
+  
+  app.get('/users', (req, res) => {
+    return UsersRepository.findAll()
+      .then((users) => res.status(200).send(users))
+      .catch((err) => res.status(500).send(err))
+  })
+  
+  app.post('/create-project', (req, res) => {
+    const { id: userId } = req.user
+    const { repoUrl, userIds = [] } = req.body
+    return ProjectsRepository.save({ repoUrl })
+      .then(async (project) => {
+        const through = { through: { role: 'MP' } }
+        await project.addUser(await UsersRepository.findById(userId), through)
+        return Promise.all(
+          userIds.map(async (userId) => project.addUser(await UsersRepository.findById(userId), through))
+        )
+      })
+      .then(() => res.status(201).send({ message: 'Project created' }))
+      .catch(({ message: error }) => res.status(500).send({ error }))
+  })

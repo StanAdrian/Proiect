@@ -59,3 +59,47 @@ app.get('/projects', (req, res) => {
       .then(() => res.status(201).send({ message: 'Project created' }))
       .catch(({ message: error }) => res.status(500).send({ error }))
   })
+  
+app.post('/add-self-as-tester', async (req, res) => {
+    const { id: userId } = req.user
+    const { projectId } = req.body
+    const project = await ProjectsRepository.findById(projectId)
+    if (project && !ProjectsRepository.isAlreadyMember(project, userId)) {
+      project.addUser(await UsersRepository.findById(userId), { through: { role: 'TESTER' } })
+      return res.status(200).send({ message: 'Added as tester to project' })
+    }
+    return res.status(401).send({ error: 'User is already member of project or project does not exist' })
+  })
+  
+  app.post('/register-bug', async (req, res) => {
+    const { id: registeringUserId } = req.user
+    const { description, priority, severity, projectId, commitUrl } = req.body
+    if ((await ProjectsRepository.getUserRole(projectId, registeringUserId)) === 'TESTER')
+      return Bug.build({
+        description,
+        priority,
+        severity,
+        projectId,
+        commitUrl,
+        registeringUserId,
+        status: 'CREATED',
+      })
+        .save()
+        .then((bug) => {
+          res.status(201).send(bug)
+        })
+        .catch((error) => {
+          res.status(500).send(error)
+        })
+    return res.status(403).send({ error: 'User is not tester of project' })
+  })
+  
+  app.get('/bugs/:projectId', async (req, res) => {
+    const { id: userId } = req.user
+    const { projectId } = req.params
+    if ((await ProjectsRepository.getUserRole(projectId, userId)) === 'MP')
+      return Bug.findAll({ where: { projectId } })
+        .then((bugs) => res.status(200).send(bugs))
+        .catch((err) => res.status(500).send(err))
+    return res.status(403).send({ error: 'User is not MP of project' })
+  })
